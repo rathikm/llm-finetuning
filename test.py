@@ -1,12 +1,21 @@
-from src.data.alpaca import load_and_prepare_alpaca
+from src.modeling import load_base_model_and_tokenizer, add_lora_adapters
 
-ds = load_and_prepare_alpaca()
+model, tok = load_base_model_and_tokenizer("TinyLlama/TinyLlama-1.1B-Chat-v1.0", use_bfloat16=False)
+model = add_lora_adapters(model, r=8, alpha=16, dropout=0.05)
 
-print(ds)                
+# Verify only adapters are trainable
+total = sum(p.numel() for p in model.parameters())
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Total params: {total:,}")
+print(f"Trainable (LoRA): {trainable:,}")
+ratio = trainable / total if total else 0
+print(f"Trainable ratio: {ratio:.4%}")
 
-# peek at first 2 examples
-for i in range(2):
-    ex = ds["train"][i]
-    print("\n--- EXAMPLE", i, "---")
-    print("PROMPT:\n", ex["prompt"][:400], "...\n")   # print first ~400 chars
-    print("RESPONSE:\n", ex["response"][:200], "...\n")
+# Spot-check: print a few trainable parameter names
+count = 0
+for n, p in model.named_parameters():
+    if p.requires_grad and "lora_" in n:
+        print("trainable:", n, p.shape)
+        count += 1
+        if count >= 5:
+            break
